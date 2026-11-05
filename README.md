@@ -3,6 +3,7 @@
 ![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-1.9.24-7F52FF?logo=kotlin&logoColor=white)
 ![Offline](https://img.shields.io/badge/OCR-offline-success)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 一款离线优先的 Android 本地小说阅读器。导入 PDF 或 TXT 后，它把页面上的文字重新排版成适合手机阅读的连续文本；没有文字层的扫描页会用本地 OCR 识别后再排版。
 
@@ -176,3 +177,13 @@ app/src/main/java/com/dsh/novelreader/
 ## 版本记录
 
 见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 许可证
+
+[MIT](LICENSE)
+
+## 第三方组件
+
+- PdfBox-Android：Apache-2.0
+- ML Kit Text Recognition：Google 条款
+- AndroidX / Room / Kotlin 协程：Apache-2.0
