@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">小说阅读器</string>
+    <string name="import_file">导入文件</string>
+    <string name="empty_title">还没有书</string>
+    <string name="empty_hint">点击下方按钮，从系统文件选择器导入 PDF 或 TXT</string>
+</resources>

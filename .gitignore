@@ -1,0 +1,35 @@
+# Android / Gradle build output
+.gradle/
+build/
+*/build/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local configuration (machine specific, contains SDK path)
+local.properties
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Signing material — never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Logs / temp
+*.log
+*.hprof
+.DS_Store
+Thumbs.db
+
+# Test artifacts and large fixtures (generate locally with testdata scripts)
+apk/
+testdata/*.pdf
+testdata/build/
+shots/*.gif
