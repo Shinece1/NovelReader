@@ -185,13 +185,18 @@ class PageLayoutAnalyzer {
             // line-oriented content (table of contents, index, list of figures):
             // every line is its own entry, so never join them into a paragraph.
             val shortCount = current.count { it.right < maxRight - bodySize * 1.2f }
-            val lineOriented = current.size >= 3 && shortCount * 2 > current.size
+            val contentsLike = current.size >= 2 &&
+                current.count {
+                    LEADER_DOTS.containsMatchIn(it.text) || TRAILING_PAGE.containsMatchIn(it.text.trim())
+                } * 2 >= current.size
+            val lineOriented = contentsLike || (current.size >= 3 && shortCount * 2 > current.size)
 
             if (lineOriented) {
                 val minLeft = minOf(pageLeft, current.minOf { it.left })
                 current.forEach { line ->
                     val text = normalizeEntry(line.text.trim())
-                    if (text.isEmpty()) return@forEach
+                    // A line that only carries the dot leader has nothing to read.
+                    if (text.isEmpty() || text.replace("…", "").isBlank()) return@forEach
                     val indent = line.left - minLeft
                     val level = when {
                         indent > bodySize * 1.2f -> 2
@@ -255,7 +260,12 @@ class PageLayoutAnalyzer {
      * "7.1.1编写…". Restore the separator for numbered/章节 entries.
      */
     private fun normalizeEntry(text: String): String {
-        var value = text
+        var value = LEADER_DOTS.replace(text, " …… ")
+        // "……3一、一个不同的国家?" — the page number of one entry is glued to
+        // the next entry; split them back onto separate lines.
+        value = GLUED_ENTRY.replace(value, "\n")
+        // OCR / text layers often drop the leader and leave "译者的话3".
+        value = TRAILING_PAGE.replace(value, "$1  $2")
         if (NUMBER_PREFIX.containsMatchIn(value)) {
             value = value.replaceFirst(NUMBER_PREFIX, "$1 ")
         }
@@ -481,5 +491,14 @@ class PageLayoutAnalyzer {
 
         /** "第7章用户输入" / "第八章函数" → group 1 = the chapter label. */
         val CHAPTER_PREFIX = Regex("^(第[\\d一二三四五六七八九十百千]+[章节])(?=[^\\s])")
+
+        /** Dot leaders of a contents entry: "......" / ". . . ." / "…………". */
+        val LEADER_DOTS = Regex("[.．。·…]{3,}|(?:\\s*[.．·]\\s*){3,}")
+
+        /** "……3一、一个不同的国家?" → the page number belongs to the previous entry. */
+        val GLUED_ENTRY = Regex("(?<=\\d{1,4})(?=[一二三四五六七八九十百]{1,3}、|附\\s*录)")
+
+        /** "译者的话3" → title and page number, when the leader was dropped. */
+        val TRAILING_PAGE = Regex("([\\u4E00-\\u9FFF）)】])(?:[.．·…\\s]*)(\\d{1,4})$")
     }
 }
