@@ -2,6 +2,10 @@ package com.dsh.novelreader.ui
 
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -14,7 +18,6 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dsh.novelreader.BuildConfig
@@ -23,6 +26,8 @@ import com.dsh.novelreader.data.Book
 import com.dsh.novelreader.data.BookStore
 import com.dsh.novelreader.data.BookType
 import com.dsh.novelreader.data.LibraryStore
+import com.dsh.novelreader.data.ReaderSettings
+import com.dsh.novelreader.data.ReaderTheme
 import com.dsh.novelreader.pdf.Importer
 import com.dsh.novelreader.util.TextUtil
 import kotlinx.coroutines.CancellationException
@@ -41,6 +46,7 @@ class HomeActivity : AppCompatActivity() {
 
     private lateinit var library: LibraryStore
     private lateinit var store: BookStore
+    private lateinit var settings: ReaderSettings
     private lateinit var adapter: BookAdapter
     private lateinit var recycler: RecyclerView
     private lateinit var emptyState: View
@@ -59,6 +65,7 @@ class HomeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_home)
         library = LibraryStore(this)
         store = BookStore(this)
+        settings = ReaderSettings(this)
 
         recycler = findViewById(R.id.bookList)
         emptyState = findViewById(R.id.emptyState)
@@ -69,8 +76,20 @@ class HomeActivity : AppCompatActivity() {
             onLongClick = { book -> confirmDelete(book) },
         )
         recycler.layoutManager = LinearLayoutManager(this)
-        recycler.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
+        recycler.addItemDecoration(object : RecyclerView.ItemDecoration() {
+            private val paint = Paint().apply { strokeWidth = 1f; isAntiAlias = true }
+
+            override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
+                paint.color = withAlpha(settings.theme.secondary, 70)
+                for (index in 0 until parent.childCount) {
+                    val child = parent.getChildAt(index)
+                    val y = child.bottom.toFloat()
+                    c.drawLine(child.left + dp(20f), y, child.right - dp(20f), y, paint)
+                }
+            }
+        })
         recycler.adapter = adapter
+        applyTheme()
 
         findViewById<Button>(R.id.importButton).setOnClickListener {
             picker.launch(
@@ -87,7 +106,38 @@ class HomeActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
+        // The reader can change the theme; re-apply it when coming back.
+        applyTheme()
     }
+
+    private fun applyTheme() {
+        val theme = settings.theme
+        window.statusBarColor = theme.bg
+        window.navigationBarColor = theme.bg
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility =
+            if (theme != ReaderTheme.NIGHT) View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR else 0
+
+        findViewById<View>(R.id.homeRoot).setBackgroundColor(theme.bg)
+        findViewById<TextView>(R.id.headerTitle).setTextColor(theme.fg)
+        findViewById<TextView>(R.id.versionText).setTextColor(theme.secondary)
+        findViewById<TextView>(R.id.emptyTitle).setTextColor(theme.secondary)
+        findViewById<TextView>(R.id.emptyHint).setTextColor(theme.secondary)
+
+        val button = findViewById<Button>(R.id.importButton)
+        button.backgroundTintList = ColorStateList.valueOf(theme.accent)
+        button.setTextColor(Color.WHITE)
+
+        adapter.titleColor = theme.fg
+        adapter.metaColor = theme.secondary
+        adapter.notifyDataSetChanged()
+        recycler.invalidateItemDecorations()
+    }
+
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+    private fun dp(value: Float): Float = value * resources.displayMetrics.density
 
     private fun refresh() {
         val books = library.books()

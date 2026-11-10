@@ -18,6 +18,9 @@ class BookAdapter(
     private val onLongClick: (Book) -> Unit,
 ) : RecyclerView.Adapter<BookAdapter.Holder>() {
 
+    var titleColor: Int = 0xFF1E1E1E.toInt()
+    var metaColor: Int = 0xFF8A8A8A.toInt()
+
     fun submit(list: List<Book>) {
         items = list
         notifyDataSetChanged()
@@ -40,6 +43,8 @@ class BookAdapter(
 
         fun bind(book: Book) {
             title.text = book.title
+            title.setTextColor(titleColor)
+            meta.setTextColor(metaColor)
             val type = if (book.type == BookType.PDF) "PDF" else "TXT"
             val percent = (book.lastPercent * 100).toInt()
             val whenText = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())

@@ -120,6 +120,21 @@ object PageBuilder {
                     pendingText.append(block.text)
                     val end = pendingText.length
                     applyStyles(pendingText, block, start, end)
+                    // A visible gap after a paragraph. Blocks that are only a hard
+                    // wrapped line (no sentence end) must stay tight, or every line
+                    // would look like its own paragraph.
+                    val endsParagraph = block.headingLevel > 0 ||
+                        (block.text.lastOrNull()?.let { it in "。！？…”』」.!?:：" } == true)
+                    if (end > start && !isEntry(block) && endsParagraph) {
+                        val factor = if (fidelity) 0.25f else 0.65f
+                        val extra = (paint.textSize * lineSpacing * factor).toInt()
+                        pendingText.setSpan(
+                            ParagraphGapSpan(extra, end - 1),
+                            end - 1,
+                            end,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
                     pendingRanges.add(block.id to (start until end))
                     lastTextBlock = block
                 }

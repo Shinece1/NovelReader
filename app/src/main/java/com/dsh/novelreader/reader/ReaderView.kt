@@ -31,7 +31,9 @@ class ReaderView @JvmOverloads constructor(
     var onLongPress: ((offset: Int) -> Unit)? = null
 
     private val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.SERIF
+        // Typeface.DEFAULT follows the system font (including fonts chosen in
+        // system settings); a hard-coded SERIF family ignored that choice.
+        typeface = Typeface.DEFAULT
         isSubpixelText = true
     }
     private val chromePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
