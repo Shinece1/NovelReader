@@ -177,6 +177,7 @@ class PageLayoutAnalyzer {
         // Indentation is measured against the page's leftmost text line, so a
         // single TOC entry still knows how far it is indented.
         val pageLeft = lines.minOfOrNull { it.left } ?: 0f
+        val pageMaxRight = lines.maxOfOrNull { it.right } ?: 0f
 
         fun flush() {
             if (current.isEmpty()) return
@@ -185,18 +186,43 @@ class PageLayoutAnalyzer {
             // line-oriented content (table of contents, index, list of figures):
             // every line is its own entry, so never join them into a paragraph.
             val shortCount = current.count { it.right < maxRight - bodySize * 1.2f }
-            val contentsLike = current.size >= 2 &&
+            val entryStarts = current.count { CONTENTS_START.containsMatchIn(it.text.trim()) }
+            val contentsLike = (current.size >= 2 &&
                 current.count {
                     LEADER_DOTS.containsMatchIn(it.text) || TRAILING_PAGE.containsMatchIn(it.text.trim())
-                } * 2 >= current.size
+                } * 2 >= current.size) ||
+                // Contents pages without dot leaders or page numbers still have
+                // one numbered entry per line.
+                (current.size >= 4 && entryStarts * 2 > current.size) ||
+                (entryStarts >= 3 && current.size >= 5)
             val lineOriented = contentsLike || (current.size >= 3 && shortCount * 2 > current.size)
 
             if (lineOriented) {
                 val minLeft = minOf(pageLeft, current.minOf { it.left })
-                current.forEach { line ->
+                // A long contents entry wraps in the PDF; its continuation must be
+                // joined back to the entry instead of becoming a second entry.
+                val entries = ArrayList<Triple<Line, String, Boolean>>()
+                for (line in current) {
                     val text = normalizeEntry(line.text.trim())
                     // A line that only carries the dot leader has nothing to read.
-                    if (text.isEmpty() || text.replace("…", "").isBlank()) return@forEach
+                    if (text.isEmpty() || text.replace("…", "").isBlank()) continue
+                    val previous = entries.lastOrNull()
+                    val previousFull = previous != null &&
+                        previous.first.right >= pageMaxRight - bodySize * 1.2f
+                    // Only a short wrap remainder ("……的进" + "攻", "……处布" + "告")
+                    // is joined; a full entry line starts a new entry.
+                    val nextIsShort = (line.right - line.left) < bodySize * 6.5f
+                    val previousComplete = previous != null &&
+                        previous.second.trimEnd().lastOrNull()?.isDigit() == true
+                    val startsEntry = CONTENTS_START.containsMatchIn(text)
+                    if (previous != null && !startsEntry && previousFull && nextIsShort && !previousComplete) {
+                        val merged = previous.second + text
+                        entries[entries.lastIndex] = Triple(previous.first, merged, true)
+                    } else {
+                        entries.add(Triple(line, text, false))
+                    }
+                }
+                entries.forEach { (line, text, merged) ->
                     val indent = line.left - minLeft
                     val level = when {
                         indent > bodySize * 1.2f -> 2
@@ -204,8 +230,12 @@ class PageLayoutAnalyzer {
                         else -> 0
                     }
                     val prefix = "  ".repeat(level)
-                    val runs = buildRuns(listOf(line), bodySize).map {
-                        it.copy(start = it.start + prefix.length, end = it.end + prefix.length)
+                    val runs = if (merged) {
+                        emptyList()
+                    } else {
+                        buildRuns(listOf(line), bodySize).map {
+                            it.copy(start = it.start + prefix.length, end = it.end + prefix.length)
+                        }
                     }
                     blocks.add(blockFor(listOf(line), prefix + text, runs, bodySize, pageWidth, pageHeight))
                 }
@@ -500,5 +530,9 @@ class PageLayoutAnalyzer {
 
         /** "译者的话3" → title and page number, when the leader was dropped. */
         val TRAILING_PAGE = Regex("([\\u4E00-\\u9FFF）)】])(?:[.．·…\\s]*)(\\d{1,4})$")
+
+        /** A contents line that begins a new entry: "（一）…", "五、…", "附录", "12 长征". */
+        val CONTENTS_START =
+            Regex("^[（(]?[一二三四五六七八九十百\\d]{1,3}[)）、.．]|^第[\\d一二三四五六七八九十百]+[章节]|^附\\s*录|^\\d{1,3}[、.]")
     }
 }

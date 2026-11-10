@@ -49,13 +49,15 @@ object OcrBlocks {
 
         val merged = mergeSameLine(raw)
         val contentsPage = looksLikeContents(merged.flatMap { it.lines })
-        val blocks = if (contentsPage) merged else mergeParagraphs(merged)
+        val blocks = if (contentsPage) mergeContentsWraps(merged) else mergeParagraphs(merged)
         val median = blocks.map { it.maxHeight }.sorted().let {
             if (it.isEmpty()) 1f else it[it.size / 2].coerceAtLeast(1f)
         }
         return blocks.mapIndexed { index, item ->
             val text = if (contentsPage) {
-                item.lines.joinToString("\n") { normalizeContentsLine(it) }
+                item.lines
+                    .filterNot { line -> line.replace("…", "").replace(".", "").isBlank() }
+                    .joinToString("\n") { normalizeContentsLine(it) }
             } else {
                 joinLines(item.lines)
             }
@@ -164,6 +166,46 @@ object OcrBlocks {
      * Such lines must stay separate; joining them produced entries like
      * "93三、中国共产党中央委员会……" on one line.
      */
+    /**
+     * A long contents entry wraps in the scan; the second physical line is a
+     * continuation, not a new entry. Join it back so "……的进" + "攻" reads
+     * "……的进攻".
+     */
+    private fun mergeContentsWraps(blocks: List<RawBlock>): List<RawBlock> {
+        if (blocks.size < 2) return blocks
+        val maxRight = blocks.maxOf { it.box.right }
+        val median = blocks.map { it.maxHeight }.sorted().let {
+            if (it.isEmpty()) 1f else it[it.size / 2].coerceAtLeast(1f)
+        }
+        val out = ArrayList<RawBlock>()
+        for (block in blocks.sortedWith(compareBy({ it.box.top }, { it.box.left }))) {
+            val last = out.lastOrNull()
+            val lastText = last?.lines?.lastOrNull()?.trim().orEmpty()
+            val firstText = block.lines.firstOrNull()?.trim().orEmpty()
+            val continues = last != null &&
+                !CONTENTS_START.containsMatchIn(firstText) &&
+                last.box.right >= maxRight - median * 1.5f &&
+                lastText.lastOrNull()?.isDigit() != true
+            if (continues && last != null) {
+                val union = Rect(last.box).apply { union(block.box) }
+                val left = lastText.lastOrNull()
+                val right = firstText.firstOrNull()
+                val separator = if (left != null && right != null && left.code < 128 && right.code < 128) " " else ""
+                out[out.lastIndex] = RawBlock(
+                    box = union,
+                    lines = listOf(lastText + separator + firstText) + block.lines.drop(1),
+                    heights = last.heights + block.heights,
+                )
+            } else {
+                out.add(block)
+            }
+        }
+        return out
+    }
+
+    private val CONTENTS_START =
+        Regex("^[（(]?[一二三四五六七八九十百\\d]{1,3}[)）、.．]|^第[\\d一二三四五六七八九十百]+[章节]|^附\\s*录|^\\d{1,3}[、.]")
+
     private fun looksLikeContents(lines: List<String>): Boolean {
         if (lines.size < 2) return false
         val hits = lines.count { line ->
