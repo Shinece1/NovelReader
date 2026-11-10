@@ -47,7 +47,7 @@ class PageLayoutAnalyzer {
         val pageHeight = page.mediaBox.height
         if (pageWidth <= 0f || pageHeight <= 0f) return PageAnalysis(emptyList(), raw)
 
-        val lines = collector.lines.map { it.toLine() }.filter { it.text.isNotBlank() }
+        val lines = mergeVisualLines(collector.lines).map { it.toLine() }.filter { it.text.isNotBlank() }
         if (lines.isEmpty()) return PageAnalysis(emptyList(), raw)
 
         val body = dropChrome(lines, pageHeight)
@@ -145,8 +145,38 @@ class PageLayoutAnalyzer {
 
     /** Running headers/footers: outermost 7% of the page, short or a page number. */
     private fun dropChrome(lines: List<Line>, pageHeight: Float): List<Line> = lines.filterNot { line ->
-        val band = line.top < pageHeight * 0.07f || line.bottom > pageHeight * 0.93f
-        band && (line.text.length < 64 || PAGE_NUMBER.matches(line.text.trim()))
+        val text = line.text.trim()
+        val header = line.top < pageHeight * 0.07f
+        val footer = line.bottom > pageHeight * 0.88f
+        val pageNumber = PAGE_NUMBER.matches(text)
+        (header && (line.text.length < 64 || pageNumber)) || (footer && pageNumber)
+    }
+
+    /**
+     * Digits are frequently typeset with a Latin font and a slightly different
+     * baseline, so PDFTextStripper emits them as their own "line". They are
+     * merged back into the visual line they belong to, otherwise the reader
+     * breaks a sentence at every year.
+     */
+    private fun mergeVisualLines(raw: List<RawLine>): List<RawLine> {
+        if (raw.size < 2) return raw
+        val sorted = raw.sortedWith(compareBy({ it.top }, { it.left }))
+        val out = ArrayList<RawLine>()
+        for (line in sorted) {
+            val last = out.lastOrNull()
+            val overlap = if (last == null) 0f else {
+                val top = max(last.top, line.top)
+                val bottom = min(last.bottom, line.bottom)
+                val smaller = min(last.height, line.height).coerceAtLeast(1f)
+                ((bottom - top) / smaller).coerceAtLeast(0f)
+            }
+            if (last != null && overlap >= 0.6f) {
+                out[out.lastIndex] = RawLine(last.positions + line.positions)
+            } else {
+                out.add(line)
+            }
+        }
+        return out
     }
 
     /** Two columns when a clean central gutter exists on both sides. */
@@ -434,6 +464,11 @@ class PageLayoutAnalyzer {
     }
 
     private class RawLine(val positions: List<TextPosition>) {
+        val top: Float get() = positions.minOfOrNull { it.yDirAdj - it.heightDir } ?: 0f
+        val bottom: Float get() = positions.maxOfOrNull { it.yDirAdj } ?: 0f
+        val left: Float get() = positions.minOfOrNull { it.xDirAdj } ?: 0f
+        val height: Float get() = positions.maxOfOrNull { it.heightDir } ?: 1f
+
         fun toLine(): Line {
             val text = StringBuilder()
             val styles = ArrayList<CharStyle>()

@@ -47,7 +47,13 @@ object OcrBlocks {
             }
         }
 
-        val merged = mergeSameLine(raw)
+        val filtered = raw.filterNot { block ->
+            // A bare page number near the top/bottom edge is running chrome.
+            val text = block.lines.joinToString("").trim()
+            val centerY = (block.box.top + block.box.bottom) / 2f / bitmapHeight
+            Regex("^\\d{1,4}$").matches(text) && (centerY < 0.05f || centerY > 0.90f)
+        }
+        val merged = mergeSameLine(if (filtered.isEmpty()) raw else filtered)
         val contentsPage = looksLikeContents(merged.flatMap { it.lines })
         val blocks = if (contentsPage) mergeContentsWraps(merged) else mergeParagraphs(merged)
         val median = blocks.map { it.maxHeight }.sorted().let {
