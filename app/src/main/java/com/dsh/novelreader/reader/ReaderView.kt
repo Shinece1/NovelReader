@@ -12,6 +12,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Draws one already-paginated page: a small header band, the body text laid out
@@ -29,6 +30,8 @@ class ReaderView @JvmOverloads constructor(
     var onMetricsChanged: (() -> Unit)? = null
     var onTap: ((fraction: Float, offset: Int?) -> Unit)? = null
     var onLongPress: ((offset: Int) -> Unit)? = null
+    /** Fired for a horizontal/vertical fling when swipe paging is selected. */
+    var onSwipe: ((forward: Boolean) -> Unit)? = null
 
     private val bodyPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         // Typeface.DEFAULT follows the system font (including fonts chosen in
@@ -67,6 +70,22 @@ class ReaderView @JvmOverloads constructor(
             override fun onLongPress(e: MotionEvent) {
                 val offset = offsetAt(e.x, e.y) ?: return
                 onLongPress?.invoke(offset)
+            }
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float,
+            ): Boolean {
+                if (e1 == null) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                if (max(abs(dx), abs(dy)) < dp(48f)) return false
+                // Right / up = next page, left / down = previous page.
+                val forward = if (abs(dx) >= abs(dy)) dx > 0 else dy < 0
+                onSwipe?.invoke(forward)
+                return true
             }
         },
     )

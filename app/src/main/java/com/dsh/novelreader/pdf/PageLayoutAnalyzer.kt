@@ -187,12 +187,10 @@ class PageLayoutAnalyzer {
             // every line is its own entry, so never join them into a paragraph.
             val shortCount = current.count { it.right < maxRight - bodySize * 1.2f }
             val entryStarts = current.count { CONTENTS_START.containsMatchIn(it.text.trim()) }
+            // Only real dot leaders and numbered entry lines mark a contents page:
+            // body lines that merely end with a year ("……于 1933") must not count.
             val contentsLike = (current.size >= 2 &&
-                current.count {
-                    LEADER_DOTS.containsMatchIn(it.text) || TRAILING_PAGE.containsMatchIn(it.text.trim())
-                } * 2 >= current.size) ||
-                // Contents pages without dot leaders or page numbers still have
-                // one numbered entry per line.
+                current.count { LEADER_DOTS.containsMatchIn(it.text) } * 2 >= current.size) ||
                 (current.size >= 4 && entryStarts * 2 > current.size) ||
                 (entryStarts >= 3 && current.size >= 5)
             val lineOriented = contentsLike || (current.size >= 3 && shortCount * 2 > current.size)

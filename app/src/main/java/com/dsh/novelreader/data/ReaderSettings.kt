@@ -14,6 +14,16 @@ enum class ReaderTheme(val key: String, val bg: Int, val fg: Int, val secondary:
     }
 }
 
+/** How pages are turned: tap zones or a swipe gesture (never both). */
+enum class PageTurnMode(val key: String) {
+    TAP("tap"),
+    SWIPE("swipe");
+
+    companion object {
+        fun fromKey(key: String?): PageTurnMode = values().firstOrNull { it.key == key } ?: TAP
+    }
+}
+
 /**
  * Reader typography and theme settings, persisted with SharedPreferences
  * (explicitly allowed by the spec, and enough for a handful of scalars).
@@ -60,6 +70,13 @@ class ReaderSettings(context: Context) {
             prefs.edit().putBoolean(KEY_FIDELITY, value).apply()
         }
 
+    /** Tap zones or swipe gestures; the two modes are mutually exclusive. */
+    var pageTurnMode: PageTurnMode
+        get() = PageTurnMode.fromKey(prefs.getString(KEY_TURN_MODE, PageTurnMode.TAP.key))
+        set(value) {
+            prefs.edit().putString(KEY_TURN_MODE, value.key).apply()
+        }
+
     companion object {
         const val MIN_FONT = 14
         const val MAX_FONT = 32
@@ -75,5 +92,6 @@ class ReaderSettings(context: Context) {
         private const val KEY_THEME = "theme"
         private const val KEY_IMAGE_PAGES = "show_image_pages"
         private const val KEY_FIDELITY = "fidelity"
+        private const val KEY_TURN_MODE = "page_turn_mode"
     }
 }

@@ -32,6 +32,8 @@ class ZoomImageView @JvmOverloads constructor(
 
     /** Horizontal position of a confirmed tap, 0..1, for the turn zones. */
     var onTapFraction: ((Float) -> Unit)? = null
+    /** Fired for a fling while the image is not zoomed (swipe paging). */
+    var onSwipe: ((forward: Boolean) -> Unit)? = null
 
     private var minScale = 1f
     private var userScale = 1f
@@ -76,6 +78,24 @@ class ZoomImageView @JvmOverloads constructor(
                     clamp()
                     invalidate()
                 }
+                return true
+            }
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float,
+            ): Boolean {
+                // While zoomed a horizontal drag pans the image, it must not page.
+                if (e1 == null || userScale > 1.01f) return false
+                val dx = e2.x - e1.x
+                val dy = e2.y - e1.y
+                if (max(kotlin.math.abs(dx), kotlin.math.abs(dy)) < 48f * resources.displayMetrics.density) {
+                    return false
+                }
+                val forward = if (kotlin.math.abs(dx) >= kotlin.math.abs(dy)) dx > 0 else dy < 0
+                onSwipe?.invoke(forward)
                 return true
             }
         },

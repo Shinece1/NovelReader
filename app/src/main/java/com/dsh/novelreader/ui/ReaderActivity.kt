@@ -27,6 +27,7 @@ import com.dsh.novelreader.data.BookStore
 import com.dsh.novelreader.data.BookType
 import com.dsh.novelreader.data.LibraryStore
 import com.dsh.novelreader.data.PageImageBlock
+import com.dsh.novelreader.data.PageTurnMode
 import com.dsh.novelreader.data.ReaderSettings
 import com.dsh.novelreader.data.ReaderTheme
 import com.dsh.novelreader.data.Section
@@ -131,6 +132,8 @@ class ReaderActivity : AppCompatActivity() {
         }
         readerView.onTap = { fraction, offset -> handleTap(fraction, offset) }
         readerView.onLongPress = { offset -> startSelection(offset) }
+        readerView.onSwipe = { forward -> swipePage(forward) }
+        imageView.onSwipe = { forward -> swipePage(forward) }
         observeOcr()
         lifecycleScope.launch {
             notes.bookmarks(book.id).collect {
@@ -414,6 +417,11 @@ class ReaderActivity : AppCompatActivity() {
             showAnnotationDialog(annotation)
             return
         }
+        // Swipe mode never turns pages on a tap, so the two styles stay exclusive.
+        if (settings.pageTurnMode == PageTurnMode.SWIPE) {
+            toggleMenu()
+            return
+        }
         when {
             fraction < ZONE_LEFT -> previousPage()
             fraction > ZONE_RIGHT -> nextPage()
@@ -421,11 +429,25 @@ class ReaderActivity : AppCompatActivity() {
         }
     }
 
+    private fun swipePage(forward: Boolean) {
+        if (settings.pageTurnMode != PageTurnMode.SWIPE) return
+        if (forward) nextPage() else previousPage()
+    }
+
+    /** Short fade so the new page does not flash in. */
+    private fun fadeInPage() {
+        val view: View = if (imageView.visibility == View.VISIBLE) imageView else readerView
+        view.animate().cancel()
+        view.alpha = 0f
+        view.animate().alpha(1f).setDuration(180L).start()
+    }
+
     private fun nextPage() {
         when {
             pageIndex < pages.lastIndex -> {
                 pageIndex++
                 renderCurrentPage()
+                fadeInPage()
                 saveProgress()
                 updateMenuState()
             }
@@ -433,6 +455,7 @@ class ReaderActivity : AppCompatActivity() {
                 sectionIndex++
                 pageIndex = 0
                 loadSection(null)
+                fadeInPage()
                 saveProgress()
             }
             else -> toast("已经是最后一页")
@@ -444,6 +467,7 @@ class ReaderActivity : AppCompatActivity() {
             pageIndex > 0 -> {
                 pageIndex--
                 renderCurrentPage()
+                fadeInPage()
                 saveProgress()
                 updateMenuState()
             }
@@ -452,6 +476,7 @@ class ReaderActivity : AppCompatActivity() {
                 loadSection(null)
                 pageIndex = pages.lastIndex.coerceAtLeast(0)
                 renderCurrentPage()
+                fadeInPage()
                 saveProgress()
                 updateMenuState()
             }
@@ -602,6 +627,27 @@ class ReaderActivity : AppCompatActivity() {
             reflow(currentAnchor())
         })
         panel.addView(layoutRow)
+
+        val turnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        turnRow.addView(TextView(this).apply {
+            text = "翻页"
+            textSize = 14f
+            setTextColor(theme.secondary)
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+        })
+        turnRow.addView(compactButton(if (settings.pageTurnMode == PageTurnMode.TAP) "点击" else "滑动") {
+            settings.pageTurnMode = if (settings.pageTurnMode == PageTurnMode.TAP) {
+                PageTurnMode.SWIPE
+            } else {
+                PageTurnMode.TAP
+            }
+            hideMenu()
+            toast(if (settings.pageTurnMode == PageTurnMode.SWIPE) "已切换为滑动翻页" else "已切换为点击翻页")
+        })
+        panel.addView(turnRow)
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
